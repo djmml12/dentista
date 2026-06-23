@@ -1,0 +1,369 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DENTIST
+  ASSISTANT
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum ToothCondition {
+  HEALTHY
+  CARIES
+  FILLED
+  CROWN
+  EXTRACTED
+  IMPLANT
+  ROOT_CANAL
+  MISSING
+  SEALANT
+  FRACTURE
+}
+
+enum MediaType {
+  RADIOGRAPH_2D
+  DICOM
+  STL_SCAN
+  PHOTO
+  DOCUMENT
+}
+
+enum BillableType {
+  SERVICE
+  PRODUCT
+  SUPPLY
+}
+
+enum ReceiptStatus {
+  DRAFT
+  ISSUED
+  PAID
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(ASSISTANT)
+  isActive     Boolean  @default(true)
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  appointments   Appointment[]
+  clinicalNotes  ClinicalNote[]
+  uploadedFiles  MediaFile[]    @relation("UploadedBy")
+  toothUpdates   ToothRecord[]
+  auditLogs      AuditLog[]
+  prescriptions  Prescription[] @relation("PrescribedBy")
+  quickNotes     QuickNote[]    @relation("QuickNoteAuthor")
+  receipts       Receipt[]      @relation("ReceiptCreatedBy")
+
+  // Datos del médico para el encabezado de la receta.
+  licenseNumber  String?
+  specialty      String?
+}
+
+model Patient {
+  id                     String   @id @default(cuid())
+  firstName              String
+  lastName               String
+  documentId             String?  @unique
+  birthDate              DateTime?
+  sex                    String?
+  phone                  String?
+  email                  String?
+  address                String?
+  emergencyContactName   String?
+  emergencyContactPhone  String?
+  notes                  String?
+  photoKey               String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  medicalHistory MedicalHistory?
+  appointments   Appointment[]
+  clinicalNotes  ClinicalNote[]
+  toothRecords   ToothRecord[]
+  mediaFiles     MediaFile[]
+  prescriptions  Prescription[]
+  quickNotes     QuickNote[]
+  receipts       Receipt[]
+
+  @@index([lastName, firstName])
+}
+
+model MedicalHistory {
+  id                 String   @id @default(cuid())
+  patientId          String   @unique
+  allergies          String[] @default([])
+  chronicConditions  String[] @default([])
+  currentMedications String[] @default([])
+  isPregnant         Boolean  @default(false)
+  isSmoker           Boolean  @default(false)
+  isDiabetic         Boolean  @default(false)
+  bloodType          String?
+  freeText           String?
+  updatedAt          DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  patientId       String
+  dentistId       String
+  startsAt        DateTime
+  endsAt          DateTime
+  status          AppointmentStatus @default(SCHEDULED)
+  reason          String?
+  notes           String?
+  remindersSentHours  Int[]             @default([])
+  createdAt           DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentist       User           @relation(fields: [dentistId], references: [id])
+  clinicalNotes ClinicalNote[]
+
+  @@index([dentistId, startsAt])
+  @@index([patientId, startsAt])
+}
+
+model ClinicalNote {
+  id            String    @id @default(cuid())
+  patientId     String
+  appointmentId String?
+  authorId      String
+  visitDate     DateTime?
+  procedure     String?
+  diagnosis     String?
+  treatment     String?
+  observations  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, createdAt])
+}
+
+model ToothRecord {
+  id          String         @id @default(cuid())
+  patientId   String
+  toothNumber Int
+  condition   ToothCondition
+  surface     String?
+  notes       String?
+  updatedAt   DateTime       @updatedAt
+  updatedById String
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  updatedBy User    @relation(fields: [updatedById], references: [id])
+
+  @@unique([patientId, toothNumber])
+}
+
+model MediaFile {
+  id           String    @id @default(cuid())
+  patientId    String
+  uploadedById String
+  type         MediaType
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String    @unique
+  thumbnailKey String?
+  description  String?
+  takenAt      DateTime?
+  createdAt    DateTime  @default(now())
+
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation("UploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([patientId, type])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  entity    String
+  entityId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// Catálogo de medicamentos para autocompletar al crear recetas.
+model Medication {
+  id        String   @id @default(cuid())
+  name      String
+  form      String? // tableta, cápsula, jarabe, gel…
+  strength  String? // concentración, p. ej. "500 mg"
+  createdAt DateTime @default(now())
+
+  @@unique([name, form, strength])
+  @@index([name])
+}
+
+model Prescription {
+  id           String   @id @default(cuid())
+  patientId    String
+  prescriberId String
+  issuedAt     DateTime @default(now())
+  diagnosis    String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  patient    Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  prescriber User               @relation("PrescribedBy", fields: [prescriberId], references: [id])
+  items      PrescriptionItem[]
+
+  @@index([patientId, issuedAt])
+}
+
+model PrescriptionItem {
+  id             String  @id @default(cuid())
+  prescriptionId String
+  drugName       String
+  presentation   String? // forma/concentración, p. ej. "Tableta 500 mg"
+  dose           String? // p. ej. "1 tableta"
+  frequency      String? // p. ej. "cada 8 horas"
+  duration       String? // p. ej. "7 días"
+  quantity       String? // p. ej. "21 tabletas"
+  instructions   String?
+  order          Int     @default(0)
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([prescriptionId])
+}
+
+// Configuración SMTP para notificaciones por correo electrónico (singleton).
+model EmailConfig {
+  id                   String   @id @default(cuid())
+  enabled              Boolean  @default(false)
+  host                 String   @default("smtp.gmail.com")
+  port                 Int      @default(587)
+  secure               Boolean  @default(false)
+  user                 String   @default("")
+  pass                 String   @default("")
+  fromName             String   @default("Consultorio Dental")
+  fromEmail            String   @default("")
+  notifyAppointment    Boolean  @default(true)
+  notifyPrescription   Boolean  @default(true)
+  reminderHoursBefore  Int[]    @default([])
+  updatedAt            DateTime @updatedAt
+}
+
+// Configuración de WhatsApp Cloud API (Meta) para notificaciones (singleton).
+model WhatsappConfig {
+  id                       String   @id @default(cuid())
+  enabled                  Boolean  @default(false)
+  phoneNumberId            String   @default("")
+  accessToken              String   @default("")
+  notifyAppointment        Boolean  @default(true)
+  notifyPrescription       Boolean  @default(true)
+  appointmentTemplateName  String   @default("cita_dental")
+  prescriptionTemplateName String   @default("receta_dental")
+  templateLanguage         String   @default("es_GT")
+  updatedAt                DateTime @updatedAt
+}
+
+// Configuración general de la clínica (singleton).
+model ClinicConfig {
+  id        String   @id @default(cuid())
+  workStart Int      @default(8)   // hora de inicio (0–23)
+  workEnd   Int      @default(20)  // hora de fin   (1–24)
+  updatedAt DateTime @updatedAt
+}
+
+// Bloc de notas rápidas / libres del paciente (separado de las notas clínicas).
+model QuickNote {
+  id        String   @id @default(cuid())
+  patientId String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  author  User    @relation("QuickNoteAuthor", fields: [authorId], references: [id])
+
+  @@index([patientId, createdAt])
+}
+
+// Catálogo de servicios, productos e insumos cobrables.
+model BillableItem {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  type        BillableType
+  price       Decimal      @db.Decimal(10, 2)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  receiptItems ReceiptItem[]
+
+  @@index([name])
+}
+
+// Recibo/cobro emitido a un paciente.
+model Receipt {
+  id          String        @id @default(cuid())
+  patientId   String
+  createdById String
+  status      ReceiptStatus @default(DRAFT)
+  notes       String?
+  issuedAt    DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  patient   Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy User          @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  items     ReceiptItem[]
+
+  @@index([patientId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Línea de un recibo.
+model ReceiptItem {
+  id             String   @id @default(cuid())
+  receiptId      String
+  billableItemId String?
+  description    String
+  quantity       Int      @default(1)
+  unitPrice      Decimal  @db.Decimal(10, 2)
+  order          Int      @default(0)
+
+  receipt      Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  billableItem BillableItem? @relation(fields: [billableItemId], references: [id], onDelete: SetNull)
+
+  @@index([receiptId])
+}

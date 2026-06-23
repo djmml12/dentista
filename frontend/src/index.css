@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 25% 14%;
+    --card: 0 0% 100%;
+    --border: 220 14% 91%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 220 14% 94%;
+    --accent-foreground: 220 25% 14%;
+    --primary: 184 60% 38%;
+    --primary-foreground: 0 0% 100%;
+    --success: 152 55% 40%;
+    --warning: 38 92% 50%;
+    --danger: 0 72% 51%;
+    color-scheme: light;
+  }
+
+  /* Modo noche: paleta slate profunda + acento teal aclarado para mantener el
+     contraste AA sobre fondos oscuros. Activado por la clase .dark en <html>. */
+  .dark {
+    --background: 222 24% 9%;
+    --foreground: 210 20% 92%;
+    --card: 222 20% 13%;
+    --border: 220 14% 22%;
+    --muted: 220 16% 18%;
+    --muted-foreground: 220 12% 62%;
+    --accent: 220 16% 20%;
+    --accent-foreground: 210 20% 92%;
+    --primary: 184 58% 48%;
+    --primary-foreground: 222 30% 10%;
+    --success: 152 52% 50%;
+    --warning: 38 92% 56%;
+    --danger: 0 70% 60%;
+    color-scheme: dark;
+  }
+
+  /* Transición suave al alternar temas, sin penalizar la carga inicial. */
+  .theme-transition,
+  .theme-transition *,
+  .theme-transition *::before,
+  .theme-transition *::after {
+    transition:
+      background-color 200ms ease,
+      border-color 200ms ease,
+      color 200ms ease,
+      fill 200ms ease,
+      stroke 200ms ease !important;
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  /* Escalado tipográfico fluido. Como todo el sistema mide en `rem` (espaciados,
+     anchos, alturas), mover la raíz escala la UID completa de forma proporcional.
+     - ≤1920px (1080p y menores): se mantiene en 16px → idéntico a hoy.
+     - Crece suave hasta 20px hacia 4K nativo, así nada se ve diminuto.
+     Patrón accesible: base en px + término en vw (respeta el zoom del navegador). */
+  html {
+    font-size: clamp(16px, 0.21vw + 12px, 20px);
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary/40 ring-offset-2 ring-offset-background rounded-md;
+  }
+
+  /* Impresión de recetas: márgenes de página y colores fieles. */
+  @media print {
+    @page {
+      margin: 1.5cm;
+    }
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      background: #fff;
+    }
+  }
+
+  /* Accesibilidad: respeta a quien pide menos movimiento. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Definido aquí (no solo en el tema de Tailwind) para que el keyframe siempre exista,
+   ya que .skeleton lo referencia directamente sin usar la utilidad animate-shimmer. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@layer components {
+  /* Skeleton con barrido (shimmer) acelerado por GPU: solo transform + opacity.
+     Uso: <div class="skeleton h-4 w-32 rounded" /> */
+  .skeleton {
+    @apply relative overflow-hidden bg-muted;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--foreground) / 0.06),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+}
