@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { authenticate, issueTokens } from './auth.service.js';
+import { authenticate, issueTokens, registerUser } from './auth.service.js';
 import { verifyRefreshToken } from '../../lib/jwt.js';
 import { prisma } from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
@@ -14,6 +14,7 @@ interface UserRow {
   role: 'ADMIN' | 'DENTIST' | 'ASSISTANT';
   licenseNumber: string | null;
   specialty: string | null;
+  recoveryEmail: string | null;
 }
 
 function publicUser(u: UserRow) {
@@ -24,6 +25,7 @@ function publicUser(u: UserRow) {
     role: u.role,
     licenseNumber: u.licenseNumber,
     specialty: u.specialty,
+    recoveryEmail: u.recoveryEmail,
   };
 }
 
@@ -96,6 +98,7 @@ const profileSelect = {
   role: true,
   licenseNumber: true,
   specialty: true,
+  recoveryEmail: true,
   isActive: true,
 } as const;
 
@@ -106,13 +109,37 @@ export async function me(req: Request, res: Response) {
   res.json({ user: publicUser(user) });
 }
 
+export async function register(req: Request, res: Response) {
+  const { username, password, name, recoveryEmail } = req.body as {
+    username: string;
+    password: string;
+    name: string;
+    recoveryEmail?: string | null;
+  };
+  const newUser = await registerUser({ username, password, name, recoveryEmail });
+  const { accessToken, refreshToken } = issueTokens(newUser);
+  setRefreshCookie(res, refreshToken);
+  res.status(201).json({ accessToken, user: publicUser(newUser) });
+}
+
 export async function updateProfile(req: Request, res: Response) {
   if (!req.user) throw new HttpError(401, 'No autenticado');
-  const body = req.body as { name?: string; licenseNumber?: string | null; specialty?: string | null };
-  const data: { name?: string; licenseNumber?: string | null; specialty?: string | null } = {};
+  const body = req.body as {
+    name?: string;
+    licenseNumber?: string | null;
+    specialty?: string | null;
+    recoveryEmail?: string | null;
+  };
+  const data: {
+    name?: string;
+    licenseNumber?: string | null;
+    specialty?: string | null;
+    recoveryEmail?: string | null;
+  } = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.licenseNumber !== undefined) data.licenseNumber = body.licenseNumber || null;
   if (body.specialty !== undefined) data.specialty = body.specialty || null;
+  if (body.recoveryEmail !== undefined) data.recoveryEmail = body.recoveryEmail || null;
   const user = await prisma.user.update({
     where: { id: req.user.sub },
     data,

@@ -15,6 +15,25 @@ export async function authenticate(username: string, password: string) {
   return user;
 }
 
+export async function registerUser(data: {
+  username: string;
+  password: string;
+  name: string;
+  recoveryEmail?: string | null;
+}) {
+  const existing = await prisma.user.findUnique({ where: { username: data.username } });
+  if (existing) throw new HttpError(409, 'El nombre de usuario ya está en uso');
+  const passwordHash = await argon2.hash(data.password);
+  return prisma.user.create({
+    data: {
+      username: data.username,
+      passwordHash,
+      name: data.name,
+      recoveryEmail: data.recoveryEmail ?? null,
+    },
+  });
+}
+
 export function issueTokens(user: {
   id: string;
   username: string;

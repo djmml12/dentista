@@ -9,12 +9,21 @@ export interface AuthUser {
   role: Role;
   licenseNumber: string | null;
   specialty: string | null;
+  recoveryEmail: string | null;
 }
 
 export interface ProfileInput {
   name?: string;
   licenseNumber?: string | null;
   specialty?: string | null;
+  recoveryEmail?: string | null;
+}
+
+export interface RegisterInput {
+  username: string;
+  password: string;
+  name: string;
+  recoveryEmail?: string | null;
 }
 
 interface SessionResponse {
@@ -39,6 +48,14 @@ export function refreshRequest() {
 
 export function logoutRequest() {
   return api<{ ok: true }>('/auth/logout', { method: 'POST', auth: false });
+}
+
+export function registerRequest(body: RegisterInput) {
+  return api<SessionResponse>('/auth/register', {
+    method: 'POST',
+    body,
+    auth: false,
+  });
 }
 
 export function updateProfileRequest(body: ProfileInput) {
